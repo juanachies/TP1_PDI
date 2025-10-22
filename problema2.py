@@ -106,7 +106,14 @@ def verificar(img):
     elif max_cols == 1:
         axes = np.expand_dims(axes, axis=1)
 
+    tipo_form = "Desconocida"
+
     for idx, celdas_renglon in enumerate(celdas):
+        # Crop nombre
+        if idx == 1:
+            crop_nombre = celdas_renglon[1]
+
+
         for j, celda in enumerate(celdas_renglon):
             ax = axes[idx, j]
             _, celda_bool = cv2.threshold(celda, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
@@ -168,6 +175,34 @@ def verificar(img):
             ax.imshow(celda_color[..., ::-1])
             ax.set_title(f"R{idx+1}C{j+1}")
             ax.axis('off')
+
+            
+            # Encontrar tipo de formulario
+            if idx == 0 and j == 0:
+                ultima_letra = letras[-1][1]
+                contours, hierarchy = cv2.findContours(ultima_letra, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+                
+                if hierarchy is not None:
+                    hierarchy = hierarchy[0]  # desanidar
+
+                    if len(contours) > 0:
+                        main_idx = max(range(len(contours)), key=lambda i: cv2.contourArea(contours[i]))
+                        contour = contours[main_idx]
+
+                        num_holes = sum(1 for i in range(len(hierarchy)) if int(hierarchy[i][3]) == main_idx)
+                        is_closed = cv2.isContourConvex(contour)
+
+                        if num_holes == 2:
+                            tipo = "B"
+                        elif num_holes == 1:
+                            tipo = "A"
+                        elif num_holes == 0 and not is_closed:
+                            tipo = "C"
+                    print(tipo)
+            tipo_form = tipo
+
+
+
             
     for i in range(n_rows):
         used_cols = len(celdas[i]) if i < len(celdas) else 0
@@ -178,10 +213,14 @@ def verificar(img):
     plt.show()
 
 
+
     #####################################################
     #####            VERIFICACIONES
     #####################################################
     checks = {}
+
+    # Tipo de formulario
+    checks['Tipo'] = tipo_form
 
     # Nombre y apellido
     na_letras = cant_letras[1][1]
@@ -231,17 +270,32 @@ def verificar(img):
 
     checks['Comentarios'] = 'OK' if com_letras <= 25 and com_palabras >= 1 else 'MAL'
 
+    return checks, crop_nombre
 
-    return checks
 
-
-imgs = ['formulario_01.png', 'formulario_02.png', 'formulario_03.png', 'formulario_04.png', 'formulario_05.png', 'formulario_vacio.png']
+imgs = ['01', '02', '03', '04', '05', 'vacio']
 
 resultados = []
-for img in imgs:
-    resultados.append(verificar(img))
+lista_imagenes = []
+estados = []
+#axes2 = axes2.flatten() 
+for i, img in enumerate(imgs):
+    check_img, imagen = verificar(f'formulario_{img}.png')
+    estados.append('OK' if 'MAL' not in check_img.values() else 'MAL')
+    resultados.append(check_img)
+    lista_imagenes.append(imagen)
 
-df = pd.DataFrame(resultados)
+fig2, axes2 = plt.subplots(2, 3, figsize=(10, 5))
+axes2 = axes2.flatten() 
+for ax, img, imagen, estado in zip(axes2, imgs, lista_imagenes, estados):
+    ax.imshow(imagen, cmap='gray')
+    ax.set_title(f'Formulario {img} - {estado}')
+    ax.axis('off')
+
+plt.tight_layout()
+plt.show()
+
+df = pd.DataFrame(resultados, index=imgs)
 
 df.to_csv("personas.csv", encoding="utf-8")
 
